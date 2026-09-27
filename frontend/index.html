@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workout Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <main class="hero">
+    <div class="hero-inner">
+      <p class="kicker">Workout Tracker</p>
+      <h1>Your next set<br>starts here.</h1>
+      <p class="subhead">Log every workout, watch your numbers move, and never lose a rep to a forgotten notebook.</p>
+    </div>
+  </main>
+
+  <section class="actions" aria-label="Main actions">
+    <a class="tile" href="add-workout.html">
+      <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M6.5 6.5 L17.5 17.5 M2 12 h4 M18 12 h4 M4.5 9.5 v5 M19.5 9.5 v5 M8 4.5 l-2 2 M18 17.5 l-2 2 M16 4.5 l2 2 M6 17.5 l2 2"/>
+      </svg>
+      <h2>Add New Workout</h2>
+      <p>Log the exercises, sets, and reps you just finished.</p>
+      <span class="tile-go">Start logging &rarr;</span>
+    </a>
+
+    <a class="tile" href="view-workouts.html">
+      <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <path d="M4 5h16M4 12h16M4 19h9"/>
+      </svg>
+      <h2>View Past Workouts</h2>
+      <p>See your full history and track progress over time.</p>
+      <span class="tile-go">See history &rarr;</span>
+    </a>
+
+    <a class="tile tile-disabled" href="#" aria-disabled="true">
+      <svg class="tile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+        <circle cx="12" cy="8" r="3.2"/>
+        <path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5"/>
+      </svg>
+      <h2>Profile &amp; Settings</h2>
+      <p>Coming soon.</p>
+    </a>
+  </section>
+
+</body>
+</html>
