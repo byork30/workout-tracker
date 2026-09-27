@@ -1,0 +1,13 @@
+# Virtual environment
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Local database
+*.db
+
+# Editor/OS clutter
+.vscode/
+.DS_Store
