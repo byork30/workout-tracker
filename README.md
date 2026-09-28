@@ -1,10 +1,8 @@
 # Workout Tracker
 
-A full-stack workout logging app built to learn full-stack development end to end — a FastAPI backend with a real database, and a plain HTML/CSS/JS frontend, with no frameworks hiding what's actually happening under the hood.
+A full-stack workout logging app built to learn full-stack development end to end; a FastAPI backend with a real database and a plain HTML/CSS/JS frontend.
 
 ![Landing page screenshot](screenshot.png)
-<!-- Add a screenshot: open frontend/index.html in your browser, take a screenshot,
-     save it as screenshot.png in the project root, and it'll show up above. -->
 
 ## Features
 
