@@ -14,8 +14,157 @@
     <div class="hero-inner">
       <p class="kicker"><a href="index.html" style="color:inherit;">&larr; Back</a></p>
       <h1>Past Workouts</h1>
-      <p class="subhead">This will list results from GET /workouts once it's built.</p>
+      <p class="subhead">See each training session, how hard it felt, and the details behind the work.</p>
     </div>
   </main>
+
+  <section class="history-panel">
+    <div id="history-list" class="history-list" aria-live="polite"></div>
+    <p id="history-status" class="form-status" role="status" aria-live="polite"></p>
+  </section>
+
+  <script>
+    const historyList = document.getElementById('history-list');
+    const statusEl = document.getElementById('history-status');
+
+    function formatDate(dateString) {
+      const date = new Date(dateString + 'T00:00:00');
+      return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      }).format(date);
+    }
+
+    function renderMetric(label, value) {
+      if (value === null || value === undefined || value === '') {
+        return '';
+      }
+      return `<li><span>${label}</span><strong>${value}</strong></li>`;
+    }
+
+    function renderExercise(exercise) {
+      const details = [];
+
+      if (exercise.category === 'strength') {
+        details.push(renderMetric('Sets', exercise.sets));
+        details.push(renderMetric('Reps', exercise.reps));
+        details.push(renderMetric('Weight', exercise.weight !== null ? `${exercise.weight} lb` : null));
+        details.push(renderMetric('Rest', exercise.rest_seconds !== null ? `${exercise.rest_seconds}s` : null));
+        details.push(renderMetric('Time', exercise.time_minutes !== null ? `${exercise.time_minutes} min` : null));
+      } else {
+        details.push(renderMetric('Duration', exercise.duration_minutes !== null ? `${exercise.duration_minutes} min` : null));
+        details.push(renderMetric('Distance', exercise.distance_miles !== null ? `${exercise.distance_miles} mi` : null));
+        details.push(renderMetric('Time', exercise.time_minutes !== null ? `${exercise.time_minutes} min` : null));
+        details.push(renderMetric('Pace', exercise.pace_per_mile));
+      }
+
+      details.push(renderMetric('Intensity', exercise.intensity !== null ? `${exercise.intensity}%` : null));
+
+      const notes = exercise.notes ? `<p class="exercise-notes">${exercise.notes}</p>` : '';
+
+      return `
+        <div class="exercise-entry">
+          <div class="exercise-header">
+            <h3>${exercise.name}</h3>
+            <span class="badge ${exercise.category}">${exercise.category}</span>
+          </div>
+          <ul class="exercise-metrics">
+            ${details.join('')}
+          </ul>
+          ${notes}
+        </div>
+      `;
+    }
+
+    function renderWorkout(workout) {
+      const exercisesHtml = workout.exercises.map(renderExercise).join('');
+      const notes = workout.notes ? `<p class="workout-note">${workout.notes}</p>` : '';
+
+      return `
+        <article class="workout-card">
+          <div class="workout-header">
+            <div>
+              <p class="workout-date">${formatDate(workout.date)}</p>
+              <h2>Workout</h2>
+            </div>
+            <div class="workout-actions">
+              <button class="small-btn edit-btn" data-id="${workout.id}">Edit</button>
+              <button class="small-btn delete-btn" data-id="${workout.id}">Delete</button>
+            </div>
+          </div>
+          ${notes}
+          <div class="exercise-list-panel">
+            ${exercisesHtml || '<p class="empty-state">No exercises logged for this workout.</p>'}
+          </div>
+        </article>
+      `;
+    }
+
+    async function loadWorkouts() {
+      try {
+        statusEl.textContent = 'Loading workouts...';
+        statusEl.classList.remove('error');
+        const response = await fetch('http://127.0.0.1:8000/workouts');
+        if (!response.ok) {
+          throw new Error('Unable to load workouts.');
+        }
+
+        const workouts = await response.json();
+
+        if (!workouts.length) {
+          historyList.innerHTML = '<div class="empty-panel">No workouts yet. Add your first session to start tracking progress.</div>';
+          statusEl.textContent = 'No workouts logged yet.';
+          return;
+        }
+
+        historyList.innerHTML = workouts.map(renderWorkout).join('');
+        attachWorkoutActionHandlers();
+        statusEl.textContent = `${workouts.length} workout${workouts.length === 1 ? '' : 's'} loaded.`;
+      } catch (error) {
+        statusEl.textContent = error.message;
+        statusEl.classList.add('error');
+      }
+    }
+
+    function attachWorkoutActionHandlers() {
+      document.querySelectorAll('.delete-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const workoutId = button.dataset.id;
+          const response = await fetch(`http://127.0.0.1:8000/workouts/${workoutId}`, {
+            method: 'DELETE'
+          });
+
+          if (!response.ok) {
+            statusEl.textContent = 'Unable to delete workout.';
+            statusEl.classList.add('error');
+            return;
+          }
+
+          loadWorkouts();
+        });
+      });
+
+      document.querySelectorAll('.edit-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const workoutId = button.dataset.id;
+          const response = await fetch(`http://127.0.0.1:8000/workouts/${workoutId}`);
+          if (!response.ok) {
+            statusEl.textContent = 'Unable to load workout for editing.';
+            statusEl.classList.add('error');
+            return;
+          }
+
+          const workout = await response.json();
+          const url = new URL('add-workout.html', window.location.href);
+          url.searchParams.set('editWorkoutId', workoutId);
+          url.searchParams.set('workoutData', encodeURIComponent(JSON.stringify(workout)));
+          window.location.href = url.toString();
+        });
+      });
+    }
+
+    loadWorkouts();
+  </script>
 </body>
 </html>

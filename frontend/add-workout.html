@@ -14,8 +14,318 @@
     <div class="hero-inner">
       <p class="kicker"><a href="index.html" style="color:inherit;">&larr; Back</a></p>
       <h1>Add Workout</h1>
-      <p class="subhead">This form is next on the list — it'll POST to /workouts once it's built.</p>
+      <p class="subhead">Log the session, rate how hard it felt, and keep the details that actually matter.</p>
     </div>
   </main>
+
+  <section class="form-panel">
+    <form id="workout-form">
+      <div class="form-grid">
+        <label class="field">
+          <span>Workout date</span>
+          <input type="date" id="workout-date" required>
+        </label>
+
+        <label class="field">
+          <span>Workout notes</span>
+          <textarea id="workout-notes" rows="3" placeholder="How did it feel? What felt strong, weak, or worth repeating?"></textarea>
+        </label>
+      </div>
+
+      <div id="exercise-list" class="exercise-list" aria-live="polite"></div>
+
+      <div class="button-row">
+        <button type="button" id="add-exercise" class="secondary-btn">+ Add exercise</button>
+        <button type="submit" class="primary-btn">Save workout</button>
+      </div>
+
+      <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <script>
+    const exerciseList = document.getElementById('exercise-list');
+    const statusEl = document.getElementById('form-status');
+    const params = new URLSearchParams(window.location.search);
+    const editWorkoutId = params.get('editWorkoutId');
+    const editWorkoutData = params.get('workoutData');
+    let exerciseCounter = 0;
+
+    function getDefaultExercise() {
+      return {
+        name: '',
+        category: 'strength',
+        sets: '',
+        reps: '',
+        weight: '',
+        intensity: 70,
+        rest_seconds: '',
+        time_minutes: '',
+        duration_minutes: '',
+        distance_miles: '',
+        pace_per_mile: '',
+        notes: ''
+      };
+    }
+
+    function fillWorkoutForm(workout) {
+      if (!workout) {
+        return;
+      }
+
+      document.getElementById('workout-date').value = workout.date;
+      document.getElementById('workout-notes').value = workout.notes || '';
+      document.querySelector('.hero h1').textContent = 'Edit Workout';
+      document.querySelector('.subhead').textContent = 'Update the session details and save your changes.';
+      document.querySelector('.primary-btn').textContent = 'Update workout';
+
+      exerciseList.innerHTML = '';
+      workout.exercises.forEach((exercise) => addExerciseCard(exercise));
+    }
+
+    function addExerciseCard(exercise = getDefaultExercise()) {
+      const index = exerciseCounter;
+      exerciseCounter += 1;
+
+      const card = document.createElement('article');
+      card.className = 'exercise-card';
+      card.dataset.index = String(index);
+
+      card.innerHTML = `
+        <div class="exercise-card-header">
+          <h2>Exercise ${index + 1}</h2>
+          <button type="button" class="remove-btn" aria-label="Remove exercise">Remove</button>
+        </div>
+
+        <div class="exercise-grid">
+          <label class="field">
+            <span>Exercise name</span>
+            <input type="text" data-role="name" value="${exercise.name}" placeholder="Bench Press" required>
+          </label>
+
+          <label class="field">
+            <span>Type</span>
+            <select data-role="category">
+              <option value="strength" ${exercise.category === 'strength' ? 'selected' : ''}>Strength</option>
+              <option value="cardio" ${exercise.category === 'cardio' ? 'selected' : ''}>Cardio</option>
+            </select>
+          </label>
+
+          <div class="field intensity-field">
+            <span>Intensity</span>
+            <div class="intensity-control">
+              <input type="range" min="0" max="100" value="${exercise.intensity ?? 70}" data-role="intensity">
+              <output data-role="intensity-output">${exercise.intensity ?? 70}%</output>
+            </div>
+          </div>
+
+          <div class="strength-fields" ${exercise.category === 'cardio' ? 'hidden' : ''}>
+            <label class="field">
+              <span>Sets</span>
+              <input type="number" min="1" step="1" data-role="sets" value="${exercise.sets ?? ''}" placeholder="4">
+            </label>
+            <label class="field">
+              <span>Reps</span>
+              <input type="number" min="1" step="1" data-role="reps" value="${exercise.reps ?? ''}" placeholder="8">
+            </label>
+            <label class="field">
+              <span>Weight</span>
+              <input type="number" min="0" step="0.5" data-role="weight" value="${exercise.weight ?? ''}" placeholder="135">
+            </label>
+            <label class="field">
+              <span>Rest (sec)</span>
+              <input type="number" min="0" step="15" data-role="rest_seconds" value="${exercise.rest_seconds ?? ''}" placeholder="90">
+            </label>
+            <label class="field">
+              <span>Time (minutes)</span>
+              <input type="number" min="0" step="1" data-role="time_minutes" value="${exercise.time_minutes ?? ''}" placeholder="12">
+            </label>
+          </div>
+
+          <div class="cardio-fields" ${exercise.category === 'strength' ? 'hidden' : ''}>
+            <label class="field">
+              <span>Duration (minutes)</span>
+              <input type="number" min="1" step="1" data-role="duration_minutes" value="${exercise.duration_minutes ?? ''}" placeholder="25">
+            </label>
+            <label class="field">
+              <span>Distance (miles)</span>
+              <input type="number" min="0" step="0.1" data-role="distance_miles" value="${exercise.distance_miles ?? ''}" placeholder="3.4">
+            </label>
+            <label class="field">
+              <span>Time (minutes)</span>
+              <input type="number" min="0" step="1" data-role="time_minutes" value="${exercise.time_minutes ?? ''}" placeholder="12">
+            </label>
+            <label class="field full-span">
+              <span>Pace per mile</span>
+              <input type="text" data-role="pace_per_mile" value="${exercise.pace_per_mile ?? ''}" placeholder="8:45">
+            </label>
+          </div>
+
+          <label class="field full-span">
+            <span>Exercise notes</span>
+            <textarea rows="2" data-role="notes" placeholder="Form cues, one-off notes, or what improved that day.">${exercise.notes ?? ''}</textarea>
+          </label>
+        </div>
+      `;
+
+      const categorySelect = card.querySelector('[data-role="category"]');
+      const intensityInput = card.querySelector('[data-role="intensity"]');
+      const intensityOutput = card.querySelector('[data-role="intensity-output"]');
+      const strengthFields = card.querySelector('.strength-fields');
+      const cardioFields = card.querySelector('.cardio-fields');
+
+      const syncCategory = () => {
+        const isStrength = categorySelect.value === 'strength';
+        strengthFields.hidden = !isStrength;
+        cardioFields.hidden = isStrength;
+        if (!isStrength) {
+          strengthFields.querySelectorAll('input').forEach((input) => {
+            if (input.dataset.role !== 'time_minutes') {
+              input.value = '';
+            }
+          });
+        } else {
+          cardioFields.querySelectorAll('input').forEach((input) => {
+            if (input.dataset.role !== 'time_minutes') {
+              input.value = '';
+            }
+          });
+        }
+      };
+
+      intensityInput.addEventListener('input', () => {
+        intensityOutput.textContent = `${intensityInput.value}%`;
+      });
+
+      categorySelect.addEventListener('change', syncCategory);
+      syncCategory();
+
+      const removeButton = card.querySelector('.remove-btn');
+      removeButton.addEventListener('click', () => {
+        card.remove();
+        if (!exerciseList.children.length) {
+          addExerciseCard();
+        }
+      });
+
+      return card;
+    }
+
+    document.getElementById('add-exercise').addEventListener('click', () => {
+      exerciseList.appendChild(addExerciseCard());
+    });
+
+    function toNumber(value) {
+      if (value === '' || value === null || value === undefined) {
+        return null;
+      }
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function clean(value) {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      return value;
+    }
+
+    function collectExercise(card) {
+      const category = card.querySelector('[data-role="category"]').value;
+      const name = card.querySelector('[data-role="name"]').value.trim();
+      if (!name) {
+        throw new Error('Each exercise needs a name.');
+      }
+
+      const base = {
+        name,
+        category,
+        intensity: toNumber(card.querySelector('[data-role="intensity"]').value),
+        notes: clean(card.querySelector('[data-role="notes"]').value.trim())
+      };
+
+      if (category === 'strength') {
+        return {
+          ...base,
+          sets: toNumber(card.querySelector('[data-role="sets"]').value),
+          reps: toNumber(card.querySelector('[data-role="reps"]').value),
+          weight: toNumber(card.querySelector('[data-role="weight"]').value),
+          rest_seconds: toNumber(card.querySelector('[data-role="rest_seconds"]').value),
+          time_minutes: toNumber(card.querySelector('[data-role="time_minutes"]').value)
+        };
+      }
+
+      return {
+        ...base,
+        time_minutes: toNumber(card.querySelector('[data-role="time_minutes"]').value),
+        duration_minutes: toNumber(card.querySelector('[data-role="duration_minutes"]').value),
+        distance_miles: toNumber(card.querySelector('[data-role="distance_miles"]').value),
+        pace_per_mile: clean(card.querySelector('[data-role="pace_per_mile"]').value.trim())
+      };
+    }
+
+    document.getElementById('workout-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      statusEl.textContent = '';
+      statusEl.className = 'form-status';
+
+      const workoutDate = document.getElementById('workout-date').value;
+      const workoutNotes = document.getElementById('workout-notes').value.trim();
+
+      try {
+        const exercises = Array.from(exerciseList.querySelectorAll('.exercise-card')).map(collectExercise);
+        const payload = {
+          date: workoutDate,
+          notes: workoutNotes || null,
+          exercises
+        };
+
+        const method = editWorkoutId ? 'PUT' : 'POST';
+        const endpoint = editWorkoutId ? `http://127.0.0.1:8000/workouts/${editWorkoutId}` : 'http://127.0.0.1:8000/workouts';
+
+        statusEl.textContent = editWorkoutId ? 'Updating workout...' : 'Saving workout...';
+
+        const response = await fetch(endpoint, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(body.detail ? JSON.stringify(body.detail) : 'Unable to save workout.');
+        }
+
+        statusEl.textContent = editWorkoutId ? 'Workout updated successfully.' : 'Workout saved successfully.';
+        statusEl.classList.add('success');
+
+        if (editWorkoutId) {
+          window.location.href = 'view-workouts.html';
+          return;
+        }
+
+        document.getElementById('workout-form').reset();
+        document.getElementById('workout-date').valueAsDate = new Date();
+        exerciseList.innerHTML = '';
+        addExerciseCard();
+      } catch (error) {
+        statusEl.textContent = error.message;
+        statusEl.classList.add('error');
+      }
+    });
+
+    if (editWorkoutData) {
+      try {
+        const workout = JSON.parse(decodeURIComponent(editWorkoutData));
+        fillWorkoutForm(workout);
+      } catch (error) {
+        statusEl.textContent = 'Unable to load workout for editing.';
+        statusEl.classList.add('error');
+      }
+    } else {
+      document.getElementById('workout-date').valueAsDate = new Date();
+      addExerciseCard();
+    }
+  </script>
 </body>
 </html>

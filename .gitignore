@@ -1,12 +1,18 @@
 # Virtual environment
 venv/
 
-# Python cache
+# Python cache and tooling
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Local database
 *.db
+
+# Test artifacts
+/tests/
 
 # Editor/OS clutter
 .vscode/
