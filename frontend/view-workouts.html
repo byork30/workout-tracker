@@ -24,69 +24,123 @@
   </section>
 
   <script>
+    const API_BASE = 'http://127.0.0.1:8000';
     const historyList = document.getElementById('history-list');
     const statusEl = document.getElementById('history-status');
+
+    const DASH = '\u2013'; // en dash, shown for any missing value
+
+    function escapeHtml(value) {
+      const div = document.createElement('div');
+      div.textContent = value;
+      return div.innerHTML;
+    }
+
+    // Returns the dash for null/undefined/empty-string, otherwise the value untouched.
+    function orDash(value) {
+      return value === null || value === undefined || value === '' ? DASH : value;
+    }
 
     function formatDate(dateString) {
       const date = new Date(dateString + 'T00:00:00');
       return new Intl.DateTimeFormat('en-US', {
         month: 'short',
         day: 'numeric',
-        year: 'numeric'
+        year: 'numeric',
       }).format(date);
     }
 
-    function renderMetric(label, value) {
-      if (value === null || value === undefined || value === '') {
-        return '';
-      }
-      return `<li><span>${label}</span><strong>${value}</strong></li>`;
+    function formatWeight(weight, unit) {
+      return weight === null || weight === undefined ? DASH : `${weight} ${unit}`;
     }
 
-    function renderExercise(exercise) {
-      const details = [];
+    function formatDuration(seconds) {
+      if (seconds === null || seconds === undefined) return DASH;
+      const minutes = seconds / 60;
+      const rounded = Number.isInteger(minutes) ? minutes : Math.round(minutes * 10) / 10;
+      return `${rounded} min`;
+    }
 
-      if (exercise.category === 'strength') {
-        details.push(renderMetric('Sets', exercise.sets));
-        details.push(renderMetric('Reps', exercise.reps));
-        details.push(renderMetric('Weight', exercise.weight !== null ? `${exercise.weight} lb` : null));
-        details.push(renderMetric('Rest', exercise.rest_seconds !== null ? `${exercise.rest_seconds}s` : null));
-        details.push(renderMetric('Time', exercise.time_minutes !== null ? `${exercise.time_minutes} min` : null));
-      } else {
-        details.push(renderMetric('Duration', exercise.duration_minutes !== null ? `${exercise.duration_minutes} min` : null));
-        details.push(renderMetric('Distance', exercise.distance_miles !== null ? `${exercise.distance_miles} mi` : null));
-        details.push(renderMetric('Time', exercise.time_minutes !== null ? `${exercise.time_minutes} min` : null));
-        details.push(renderMetric('Pace', exercise.pace_per_mile));
+    function formatDistance(distance) {
+      return distance === null || distance === undefined ? DASH : `${distance} mi`;
+    }
+
+    // ---------- Rendering one set row ----------
+
+    function renderSetRow(set, index, category, weightUnit) {
+      const warmupTag = set.is_warmup ? '<span class="warmup-tag">Warm-up</span>' : '';
+
+      if (category === 'strength') {
+        return `
+          <div class="set-line">
+            <span class="set-label">Set ${index + 1}</span>
+            <span>${orDash(set.reps)} reps</span>
+            <span>${formatWeight(set.weight, weightUnit)}</span>
+            ${warmupTag}
+          </div>
+        `;
       }
 
-      details.push(renderMetric('Intensity', exercise.intensity !== null ? `${exercise.intensity}%` : null));
+      return `
+        <div class="set-line">
+          <span class="set-label">Set ${index + 1}</span>
+          <span>${orDash(set.reps)} reps</span>
+          <span>${formatDuration(set.duration_seconds)}</span>
+          <span>${formatDistance(set.distance)}</span>
+          <span>${orDash(set.pace_per_mile)} / mi</span>
+        </div>
+      `;
+    }
 
-      const notes = exercise.notes ? `<p class="exercise-notes">${exercise.notes}</p>` : '';
+    // ---------- Rendering one exercise (a catalog exercise + its sets) ----------
+
+    function renderExercise(workoutExercise, weightUnit) {
+      const exercise = workoutExercise.exercise;
+      const setsHtml = (workoutExercise.sets || [])
+        .map((set, index) => renderSetRow(set, index, exercise.category, weightUnit))
+        .join('');
+
+      const notes = workoutExercise.notes
+        ? `<p class="exercise-notes">${escapeHtml(workoutExercise.notes)}</p>`
+        : '';
 
       return `
         <div class="exercise-entry">
           <div class="exercise-header">
-            <h3>${exercise.name}</h3>
+            <h3>${escapeHtml(exercise.name)}</h3>
             <span class="badge ${exercise.category}">${exercise.category}</span>
           </div>
-          <ul class="exercise-metrics">
-            ${details.join('')}
-          </ul>
+          <div class="set-rows">
+            ${setsHtml || '<p class="empty-state">No sets logged.</p>'}
+          </div>
           ${notes}
         </div>
       `;
     }
 
+    // ---------- Rendering one workout ----------
+
     function renderWorkout(workout) {
-      const exercisesHtml = workout.exercises.map(renderExercise).join('');
-      const notes = workout.notes ? `<p class="workout-note">${workout.notes}</p>` : '';
+      const exercisesHtml = (workout.exercises || [])
+        .map((we) => renderExercise(we, workout.weight_unit))
+        .join('');
+
+      const notes = workout.notes
+        ? `<p class="workout-note">${escapeHtml(workout.notes)}</p>`
+        : '';
+
+      const title = workout.title ? escapeHtml(workout.title) : 'Workout';
+      const intensity =
+        workout.intensity === null || workout.intensity === undefined
+          ? `${DASH} intensity`
+          : `${workout.intensity}% intensity`;
 
       return `
         <article class="workout-card">
           <div class="workout-header">
             <div>
-              <p class="workout-date">${formatDate(workout.date)}</p>
-              <h2>Workout</h2>
+              <p class="workout-date">${formatDate(workout.date)} &middot; ${intensity}</p>
+              <h2>${title}</h2>
             </div>
             <div class="workout-actions">
               <button class="small-btn edit-btn" data-id="${workout.id}">Edit</button>
@@ -101,14 +155,14 @@
       `;
     }
 
+    // ---------- Load + wire up actions ----------
+
     async function loadWorkouts() {
       try {
         statusEl.textContent = 'Loading workouts...';
         statusEl.classList.remove('error');
-        const response = await fetch('http://127.0.0.1:8000/workouts');
-        if (!response.ok) {
-          throw new Error('Unable to load workouts.');
-        }
+        const response = await fetch(`${API_BASE}/workouts`);
+        if (!response.ok) throw new Error('Unable to load workouts.');
 
         const workouts = await response.json();
 
@@ -131,9 +185,7 @@
       document.querySelectorAll('.delete-btn').forEach((button) => {
         button.addEventListener('click', async () => {
           const workoutId = button.dataset.id;
-          const response = await fetch(`http://127.0.0.1:8000/workouts/${workoutId}`, {
-            method: 'DELETE'
-          });
+          const response = await fetch(`${API_BASE}/workouts/${workoutId}`, { method: 'DELETE' });
 
           if (!response.ok) {
             statusEl.textContent = 'Unable to delete workout.';
@@ -148,7 +200,7 @@
       document.querySelectorAll('.edit-btn').forEach((button) => {
         button.addEventListener('click', async () => {
           const workoutId = button.dataset.id;
-          const response = await fetch(`http://127.0.0.1:8000/workouts/${workoutId}`);
+          const response = await fetch(`${API_BASE}/workouts/${workoutId}`);
           if (!response.ok) {
             statusEl.textContent = 'Unable to load workout for editing.';
             statusEl.classList.add('error');

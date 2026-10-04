@@ -1,64 +1,33 @@
-from fastapi import FastAPI, Depends, HTTPException
+from contextlib import asynccontextmanager
+from typing import Optional
+
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import models
 import schemas
-from database import engine, get_db
+from database import engine, get_db, SessionLocal
+from seed import seed_exercises
 
 
-def ensure_exercise_columns():
-    """Upgrade legacy exercise tables so strength and cardio entries can coexist."""
-    inspector = inspect(engine)
-    if not inspector.has_table("exercises"):
-        models.Base.metadata.create_all(bind=engine)
-        return
-
-    columns = inspector.get_columns("exercises")
-    existing_columns = {column["name"]: column for column in columns}
-
-    needs_rebuild = (
-        "category" not in existing_columns
-        or "duration_minutes" not in existing_columns
-        or "time_minutes" not in existing_columns
-        or existing_columns.get("sets", {}).get("nullable") is False
-        or existing_columns.get("reps", {}).get("nullable") is False
-    )
-
-    if not needs_rebuild:
-        return
-
-    with engine.begin() as connection:
-        connection.execute(text("ALTER TABLE exercises RENAME TO exercises_old"))
-
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Runs once when the server starts: create any missing tables, then seed
+    # the exercise catalog (seed_exercises skips names that already exist).
     models.Base.metadata.create_all(bind=engine)
-
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                """
-                INSERT INTO exercises (
-                    id, workout_id, name, category, sets, reps, weight,
-                    intensity, rest_seconds, time_minutes, duration_minutes,
-                    distance_miles, pace_per_mile, notes
-                )
-                SELECT
-                    id, workout_id, name,
-                    COALESCE(category, 'strength'),
-                    sets, reps, weight,
-                    COALESCE(intensity, 0), rest_seconds, NULL, duration_minutes,
-                    distance_miles, pace_per_mile, notes
-                FROM exercises_old
-                """
-            )
-        )
-        connection.execute(text("DROP TABLE exercises_old"))
+    db = SessionLocal()
+    try:
+        seed_exercises(db)
+    finally:
+        db.close()
+    yield
 
 
-ensure_exercise_columns()
+app = FastAPI(title="Workout Tracker", lifespan=lifespan)
 
-app = FastAPI(title="Workout Tracker")
+# Lets the frontend (served from a different origin/file) call this API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -68,12 +37,86 @@ app.add_middleware(
 )
 
 
-@app.post("/workouts", response_model=schemas.WorkoutOut)
+# ---------- Exercise catalog ----------
+
+@app.get("/exercises", response_model=list[schemas.ExerciseOut])
+def list_exercises(
+    q: Optional[str] = Query(default=None, description="Search by name, partial match"),
+    category: Optional[schemas.Category] = None,
+    db: Session = Depends(get_db),
+):
+    """List catalog exercises, optionally filtered by search text and/or category."""
+    query = db.query(models.Exercise)
+    if q:
+        query = query.filter(models.Exercise.name.ilike(f"%{q}%"))
+    if category:
+        query = query.filter(models.Exercise.category == category)
+    return query.order_by(models.Exercise.name).all()
+
+
+@app.post("/exercises", response_model=schemas.ExerciseOut, status_code=201)
+def create_exercise(exercise: schemas.ExerciseCreate, db: Session = Depends(get_db)):
+    """Add a custom exercise to the catalog."""
+    existing = (
+        db.query(models.Exercise)
+        .filter(func.lower(models.Exercise.name) == exercise.name.lower())
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"An exercise named '{existing.name}' already exists",
+        )
+
+    db_exercise = models.Exercise(**exercise.model_dump(), is_custom=True)
+    db.add(db_exercise)
+    db.commit()
+    db.refresh(db_exercise)
+    return db_exercise
+
+
+# ---------- Workouts ----------
+
+def _build_workout_exercises(
+    exercises: list[schemas.WorkoutExerciseCreate], db: Session
+) -> list[models.WorkoutExercise]:
+    """Validates each exercise_id against the catalog and builds the
+    WorkoutExercise + WorkoutSet objects for a create/update."""
+    built = []
+    for position, item in enumerate(exercises, start=1):
+        exercise = (
+            db.query(models.Exercise)
+            .filter(models.Exercise.id == item.exercise_id)
+            .first()
+        )
+        if exercise is None:
+            raise HTTPException(
+                status_code=400, detail=f"Exercise id {item.exercise_id} not found"
+            )
+
+        workout_exercise = models.WorkoutExercise(
+            exercise_id=item.exercise_id, position=position, notes=item.notes
+        )
+        for set_number, set_data in enumerate(item.sets, start=1):
+            workout_exercise.sets.append(
+                models.WorkoutSet(set_number=set_number, **set_data.model_dump())
+            )
+        built.append(workout_exercise)
+    return built
+
+
+@app.post("/workouts", response_model=schemas.WorkoutOut, status_code=201)
 def create_workout(workout: schemas.WorkoutCreate, db: Session = Depends(get_db)):
-    """Create a workout along with all of its exercises in one request."""
-    db_workout = models.Workout(date=workout.date, notes=workout.notes)
-    for exercise in workout.exercises:
-        db_workout.exercises.append(models.Exercise(**exercise.model_dump(exclude_none=True)))
+    """Create a workout along with all of its exercises and sets in one request."""
+    db_workout = models.Workout(
+        date=workout.date,
+        title=workout.title,
+        duration_minutes=workout.duration_minutes,
+        intensity=workout.intensity,
+        weight_unit=workout.weight_unit,
+        notes=workout.notes,
+    )
+    db_workout.exercises = _build_workout_exercises(workout.exercises, db)
 
     db.add(db_workout)
     db.commit()
@@ -97,17 +140,28 @@ def get_workout(workout_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/workouts/{workout_id}", response_model=schemas.WorkoutOut)
-def update_workout(workout_id: int, workout: schemas.WorkoutCreate, db: Session = Depends(get_db)):
-    """Replace a workout and its exercises with updated values."""
-    db_workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+def update_workout(
+    workout_id: int, workout: schemas.WorkoutCreate, db: Session = Depends(get_db)
+):
+    """Replace a workout's details and its full list of exercises/sets."""
+    db_workout = (
+        db.query(models.Workout).filter(models.Workout.id == workout_id).first()
+    )
     if db_workout is None:
         raise HTTPException(status_code=404, detail="Workout not found")
 
     db_workout.date = workout.date
+    db_workout.title = workout.title
+    db_workout.duration_minutes = workout.duration_minutes
+    db_workout.intensity = workout.intensity
+    db_workout.weight_unit = workout.weight_unit
     db_workout.notes = workout.notes
+
+    # Clear and flush first so the old rows are actually deleted before the
+    # replacements are built, rather than relying on relationship diffing.
     db_workout.exercises.clear()
-    for exercise in workout.exercises:
-        db_workout.exercises.append(models.Exercise(**exercise.model_dump(exclude_none=True)))
+    db.flush()
+    db_workout.exercises = _build_workout_exercises(workout.exercises, db)
 
     db.commit()
     db.refresh(db_workout)
@@ -116,7 +170,7 @@ def update_workout(workout_id: int, workout: schemas.WorkoutCreate, db: Session 
 
 @app.delete("/workouts/{workout_id}")
 def delete_workout(workout_id: int, db: Session = Depends(get_db)):
-    """Delete a workout by id."""
+    """Delete a workout, and its exercises/sets via cascade, by id."""
     workout = db.query(models.Workout).filter(models.Workout.id == workout_id).first()
     if workout is None:
         raise HTTPException(status_code=404, detail="Workout not found")

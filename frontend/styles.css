@@ -236,10 +236,84 @@ body {
 
 .strength-fields,
 .cardio-fields {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
   grid-column: 1 / -1;
+}
+
+.category-indicator {
+  border: 1px dashed var(--surface-border);
+  border-radius: 10px;
+  padding: 0.8rem 0.85rem;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.sets-list {
+  display: grid;
+  gap: 0.7rem;
+  margin-bottom: 0.8rem;
+}
+
+.set-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)) auto;
+  gap: 0.7rem;
+  align-items: end;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--surface-border);
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.set-row .field {
+  gap: 0.3rem;
+  font-size: 0.82rem;
+}
+
+.set-row .field input {
+  padding: 0.6rem 0.7rem;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding-bottom: 0.7rem;
+}
+
+.remove-set-btn {
+  border: 1px solid var(--surface-border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  align-self: end;
+  margin-bottom: 2px;
+}
+
+.remove-set-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.add-set-btn {
+  border: 1px dashed var(--surface-border);
+  background: transparent;
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-set-btn:hover {
+  background: rgba(212, 162, 76, 0.08);
 }
 
 .full-span {
@@ -435,6 +509,45 @@ body {
   font-size: 0.96rem;
 }
 
+.set-rows {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.set-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.set-label {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  min-width: 52px;
+}
+
+.warmup-tag {
+  margin-left: auto;
+  background: rgba(212, 162, 76, 0.15);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+}
+
 .exercise-notes,
 .empty-state,
 .empty-panel {
@@ -453,9 +566,11 @@ body {
 @media (max-width: 720px) {
   .actions,
   .form-grid,
-  .exercise-grid,
-  .strength-fields,
-  .cardio-fields {
+  .exercise-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .set-row {
     grid-template-columns: 1fr;
   }
 
